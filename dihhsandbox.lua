@@ -1,0 +1,94 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local LOCAL_PLAYER = Players.LocalPlayer
+
+-- ===== CONFIG =====
+-- If true, the script will loop through every badge and attempt to award it.
+local ALLOW_MASS_AWARD = true
+-- ==================
+
+local function findBadgesModule()
+	for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
+		if obj:IsA("ModuleScript") and obj.Name == "Badges" then
+			return obj
+		end
+	end
+	local direct = ReplicatedStorage:FindFirstChild("Badges")
+	if direct and direct:IsA("ModuleScript") then
+		return direct
+	end
+	return nil
+end
+
+local moduleScript = findBadgesModule()
+if not moduleScript then
+	return
+end
+
+local ok, Badges = pcall(require, moduleScript)
+if not ok or typeof(Badges) ~= "table" then
+	return
+end
+
+local function safeAwardBadge(badgeOrId)
+	local success, err = pcall(function()
+		Badges:AwardBadge(badgeOrId)
+	end)
+	if not success then
+		warn("failed for", badgeOrId, "->", err)
+	else
+		print("called for", badgeOrId)
+	end
+end
+local function awardByCodeName(codeName)
+	if not codeName or type(codeName) ~= "string" then
+		warn("codeName must be a string")
+		return
+	end
+	local badgeTable = Badges:GetBadgeFromCodeName(codeName) or Badges.Badges[codeName]
+	if not badgeTable then
+		warn("Badge not found for codeName:", codeName)
+		return
+	end
+	safeAwardBadge(badgeTable)
+end
+local function awardById(id)
+	if type(id) ~= "number" then
+		warn("id must be a number")
+		return
+	end
+	safeAwardBadge(id)
+local function awardAllBadges()
+	if not ALLOW_MASS_AWARD then
+		warn("Mass awarding disabled (set ALLOW_MASS_AWARD = true to enable).")
+		return
+	end
+	if not Badges.Badges then
+		warn("No Badges table found in module.")
+		return
+	end
+	for codeName, badgeInfo in pairs(Badges.Badges) do
+		-- pcall per call to avoid one failure stopping the loop
+		local okLoop, errLoop = pcall(function()
+			safeAwardBadge(badgeInfo)
+		end)
+		if not okLoop then
+			warn("Error awarding", codeName, "->", errLoop)
+		end
+		wait(0.2)
+	end
+end
+getgenv().AwardBadgeClient = {
+	awardByCodeName = awardByCodeName,
+	awardById = awardById,
+	awardAllBadges = awardAllBadges,
+	module = Badges
+}
+print("Ready.")
+if RunService:IsStudio() then
+	error("max go kill yourself")
+	return
+end
+awardAllBadges()
